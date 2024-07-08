@@ -164,12 +164,19 @@ def logout():
     data = request.get_json()
     print(data)
     email = data['Email']
+
+    player = cursor.fetchone()
    # Update Active_status to False (0)
     cursor = current_app.mysql.cursor(dictionary=True)
     cursor.execute(
         "UPDATE Player SET Active_status = FALSE WHERE Email = %s", (email,))
     current_app.mysql.commit()
     cursor.close()
+
+    if player['Active_status'] == 0:
+        player['Active_status'] = 'true' 
+    else:
+        player['Active_status'] = 'false'
 
     # Clear session data
     session.pop('email', None)
