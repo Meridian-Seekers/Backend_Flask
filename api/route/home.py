@@ -7,6 +7,8 @@ from flasgger import swag_from
 from werkzeug.security import generate_password_hash, check_password_hash
 from api.schema.player import PlayerSchema, LoginSchema
 
+
+
 home_api = Blueprint('api', __name__)
 
 
@@ -162,24 +164,337 @@ def login():
 })
 def logout():
     data = request.get_json()
-    print(data)
-    email = data['Email']
+    email = data.get('Email')
 
-    player = cursor.fetchone()
-   # Update Active_status to False (0)
+    if not email:
+        return jsonify({'message': 'Email is required'}), HTTPStatus.BAD_REQUEST
+
+    # Check if the player exists
     cursor = current_app.mysql.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM Player WHERE Email = %s", (email,))
+    player = cursor.fetchone()
+
+    if not player:
+        cursor.close()
+        return jsonify({'message': 'No active session found'}), HTTPStatus.UNAUTHORIZED
+
+    # Update Active_status to False (0)
     cursor.execute(
         "UPDATE Player SET Active_status = FALSE WHERE Email = %s", (email,))
     current_app.mysql.commit()
-    cursor.close()
 
-    if player['Active_status'] == 0:
-        player['Active_status'] = 'true' 
-    else:
-        player['Active_status'] = 'false'
+    # Close cursor
+    cursor.close()
 
     # Clear session data
     session.pop('email', None)
 
     return jsonify({'message': 'Logout successful'}), HTTPStatus.OK
 
+##newly added validate email
+
+@home_api.route('/validate_email', methods=['POST'])
+@swag_from({
+    'parameters': [
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'email': {
+                        'type': 'string'
+                    }
+                },
+                'required': ['email']
+            }
+        }
+    ],
+    'responses': {
+        HTTPStatus.OK.value: {
+            'description': 'Email is registered',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'message': {
+                        'type': 'string'
+                    }
+                }
+            }
+        },
+        HTTPStatus.NOT_FOUND.value: {
+            'description': 'Email not registered'
+        }
+    }
+})
+def validate_email():
+    data = request.get_json()
+    email = data.get('email')
+
+    cursor = current_app.mysql.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM Player WHERE Email = %s", (email,))
+    player = cursor.fetchone()
+    cursor.close()
+
+    if player:
+        session['reset_email'] = email  # Store email in session this is new addded
+        return jsonify({'message': 'Email is registered'}), HTTPStatus.OK
+    else:
+        return jsonify({'message': 'Email not registered'}), HTTPStatus.NOT_FOUND
+    
+    
+
+'''@home_api.route('/reset-password', methods=['POST'])
+@swag_from({
+    'parameters': [
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'email': {'type': 'string'},
+                    'new_password': {'type': 'string'},
+                    'confirm_password': {'type': 'string'}
+                },
+                'required': ['email', 'new_password', 'confirm_password']
+            }
+        }
+    ],
+    'responses': {
+        HTTPStatus.OK.value: {
+            'description': 'Password reset successful',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'message': {'type': 'string'}
+                }
+            }
+        },
+        HTTPStatus.BAD_REQUEST.value: {
+            'description': 'Invalid input'
+        }
+    }
+})
+def resetPassword():
+    try:
+        data = request.get_json()
+        
+        email = data.get('email')
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
+        
+        if not email or not new_password or not confirm_password:
+            return jsonify({'message': 'Email, new password, and confirm password are required'}), HTTPStatus.BAD_REQUEST
+        
+        if new_password != confirm_password:
+            return jsonify({'message': 'Passwords do not match'}), HTTPStatus.BAD_REQUEST
+        
+        cursor = current_app.mysql.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM Player WHERE Email = %s", (email,))
+        player = cursor.fetchone()
+        
+        if not player:
+            cursor.close()
+            return jsonify({'message': 'Email not registered'}), HTTPStatus.NOT_FOUND
+        
+        hashed_password = generate_password_hash(new_password)
+        
+        cursor.execute("UPDATE Player SET Password = %s WHERE Email = %s", (hashed_password, email))
+        current_app.mysql.commit()
+        cursor.close()
+        
+        return jsonify({'message': 'Password reset successful'}), HTTPStatus.OK
+    
+    except ValidationErr as err:
+        return jsonify(err), HTTPStatus.BAD_REQUEST
+    except Exception as e:
+        return jsonify({'message': str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR  '''
+
+'''@home_api.route('/reset-password', methods=['POST'])
+def reset_password():
+    try:
+        data = request.get_json()
+        
+        email = data.get('email')
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
+        
+        if not email or not new_password or not confirm_password:
+            return jsonify({'message': 'Email, new password, and confirm password are required'}), HTTPStatus.BAD_REQUEST
+        
+        if new_password != confirm_password:
+            return jsonify({'message': 'Passwords do not match'}), HTTPStatus.BAD_REQUEST
+        
+        # Connect to your database
+        cursor = current_app.mysql.cursor(dictionary=True)
+        
+        # Check if the email exists
+        cursor.execute("SELECT * FROM Player WHERE Email = %s", (email,))
+        player = cursor.fetchone()
+        
+        if not player:
+            cursor.close()
+            return jsonify({'message': 'Email not registered'}), HTTPStatus.NOT_FOUND
+        
+        # Hash the new password
+        hashed_password = generate_password_hash(new_password)
+        
+        # Update the password in the database
+        cursor.execute("UPDATE Player SET Password = %s WHERE Email = %s", (hashed_password, email))
+        current_app.mysql.commit()
+        cursor.close()
+        
+        return jsonify({'message': 'Password reset successful'}), HTTPStatus.OK
+    
+    except Exception as e:
+        return jsonify({'message': str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR'''
+
+
+
+
+'''@home_api.route('/reset_password', methods=['POST'])
+@swag_from({
+    'parameters': [
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'new_password': {'type': 'string'},
+                    'confirm_password': {'type': 'string'}
+                },
+                'required': ['new_password', 'confirm_password']
+            }
+        }
+    ],
+    'responses': {
+        HTTPStatus.OK.value: {
+            'description': 'Password reset successful',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'message': {'type': 'string'}
+                }
+            }
+        },
+        HTTPStatus.BAD_REQUEST.value: {
+            'description': 'Invalid input'
+        }
+    }
+})
+def reset_password():
+    try:
+        data = request.get_json()
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
+        
+        email = session.get('reset_email')  # Get the email from the session
+
+        if not email:
+            return jsonify({'message': 'Email not found in session'}), HTTPStatus.BAD_REQUEST
+
+        if not new_password or not confirm_password:
+            return jsonify({'message': 'New password and confirm password are required'}), HTTPStatus.BAD_REQUEST
+        
+        if new_password != confirm_password:
+            return jsonify({'message': 'Passwords do not match'}), HTTPStatus.BAD_REQUEST
+        
+        # Hash the new password and update it in the database
+        hashed_password = generate_password_hash(new_password)
+        cursor = current_app.mysql.cursor(dictionary=True)
+        cursor.execute("UPDATE Player SET Password = %s WHERE Email = %s", (hashed_password, email))
+        current_app.mysql.commit()
+        cursor.close()
+        
+        # Clear the session email
+        session.pop('reset_email', None)
+        
+        return jsonify({'message': 'Password reset successful'}), HTTPStatus.OK
+    
+    except Exception as e:
+        return jsonify({'message': str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR'''
+
+@home_api.route('/password_reset', methods=['POST'])
+@swag_from({
+    'parameters': [
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'new_password': {'type': 'string'},
+                    'confirm_password': {'type': 'string'}
+                },
+                'required': ['new_password', 'confirm_password']
+            }
+        }
+    ],
+    'responses': {
+        HTTPStatus.OK.value: {
+            'description': 'Password reset successful',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'message': {'type': 'string'}
+                }
+            }
+        },
+        HTTPStatus.BAD_REQUEST.value: {
+            'description': 'Invalid input or password mismatch',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'message': {'type': 'string'}
+                }
+            }
+        },
+        HTTPStatus.INTERNAL_SERVER_ERROR.value: {
+            'description': 'Internal server error',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'message': {'type': 'string'}
+                }
+            }
+        }
+    }
+})
+def password_reset():
+    try:
+        data = request.get_json()
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
+        
+        email = data.get('email')  # Get the email from the session
+
+        if not email:
+            return jsonify({'message': 'Email not found in session'}), HTTPStatus.BAD_REQUEST
+        
+        if not new_password or not confirm_password:
+            return jsonify({'message': 'New password and confirm password are required'}), HTTPStatus.BAD_REQUEST
+        
+        if new_password != confirm_password:
+            return jsonify({'message': 'Passwords do not match'}), HTTPStatus.BAD_REQUEST
+        
+        # Hash the new password and update it in the database
+        hashed_password = generate_password_hash(new_password)
+        cursor = current_app.mysql.cursor(dictionary=True)
+        cursor.execute("UPDATE Player SET Password = %s WHERE Email = %s", (hashed_password, email))
+        current_app.mysql.commit()
+        cursor.close()
+        
+        # Clear the session email
+        session.pop('reset_email', None)
+        
+        return jsonify({'message': 'Password reset successful'}), HTTPStatus.OK
+    
+    except Exception as e:
+        current_app.logger.error(f'Error resetting password: {str(e)}')  # Log the error for debugging
+        return jsonify({'message': 'Internal server error'}), HTTPStatus.INTERNAL_SERVER_ERROR
